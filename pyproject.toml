@@ -1,6 +1,6 @@
 [project]
 name = "sre-copilot"
-version = "0.1.0"
+version = "0.1.1"
 description = "SRE Copilot Agent - Autonomous Slack bot for incident triage"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -69,7 +69,7 @@ build-backend = "hatchling.build"
 packages = ["src/sre_bot"]
 
 [tool.ruff]
-target-version = "py311"
+target-version = "0.1.1"
 line-length = 100
 src = ["src", "tests"]
 
@@ -94,7 +94,7 @@ ignore = [
 known-first-party = ["sre_bot"]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "0.1.1"
 strict = true
 warn_return_any = true
 warn_unused_ignores = true
