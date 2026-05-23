@@ -27,6 +27,20 @@ Guidelines:
 - Set confidence based on evidence strength (high/medium/low)
 - Flag for escalation if: data loss risk, security concern, or widespread impact
 
+### Alert Correlation Analysis Instructions:
+When analyzing correlated alerts, consider:
+1. **Cascading Failures**: An infrastructure alert (database, cache, network) happening BEFORE
+   the current alert may be the root cause. Example: "DatabaseConnectionTimeout" → "HighErrorRate"
+2. **Same Service Patterns**: Multiple alerts from the same service suggest a recurring or worsening issue
+3. **Same Namespace Issues**: Other services in the same namespace failing may indicate:
+   - Shared dependency issues (database, config, secrets)
+   - Network/connectivity problems
+   - Resource contention
+4. **Timeline Analysis**: Alerts are ordered by timestamp - earlier infrastructure alerts
+   are more likely to be root causes of later application alerts
+5. **Severity Escalation**: If a warning became critical, or multiple services are affected,
+   this indicates a spreading issue that needs immediate attention
+
 ### Kubernetes-Specific Analysis Instructions:
 When analyzing Kubernetes data, pay close attention to:
 
@@ -354,6 +368,70 @@ def _build_analysis_prompt(state: AgentState) -> str:
     else:
         sections.append("## Recent Changes\nNo GitHub data available.\n")
 
+    # Correlated Alerts
+    if state.correlated_alerts:
+        corr = state.correlated_alerts
+        corr_section = f"## Correlated Alerts (Last {corr.time_window_minutes} minutes)\n"
+        corr_section += (
+            "**IMPORTANT:** Review these alerts to identify potential cascading failures.\n\n"
+        )
+
+        # Potential root causes (most important)
+        if corr.potential_root_cause_alerts:
+            corr_section += "### Potential Root Cause Alerts\n"
+            corr_section += "These alerts may have CAUSED the current incident:\n"
+            for alert in corr.potential_root_cause_alerts:
+                time_diff = (state.alert.timestamp - alert.timestamp).total_seconds() / 60
+                corr_section += f"\n**{alert.alert_name}** ({alert.service_name})\n"
+                corr_section += f"  - Severity: {alert.severity}\n"
+                corr_section += f"  - Occurred: {time_diff:.0f} minutes BEFORE current alert\n"
+                if alert.probable_root_cause:
+                    corr_section += f"  - Root Cause Analysis: {alert.probable_root_cause[:150]}\n"
+                if alert.summary:
+                    corr_section += f"  - Summary: {alert.summary[:100]}\n"
+
+        # Same service alerts (pattern detection)
+        if corr.same_service_alerts:
+            corr_section += f"\n### Same Service History ({len(corr.same_service_alerts)} alerts)\n"
+            corr_section += "Recent alerts for the same service (may indicate recurring issue):\n"
+            for alert in corr.same_service_alerts[:3]:
+                time_diff = (state.alert.timestamp - alert.timestamp).total_seconds() / 60
+                corr_section += (
+                    f"  - {alert.alert_name} ({alert.severity}) - {time_diff:.0f}min ago"
+                )
+                if alert.probable_root_cause:
+                    corr_section += f" - Cause: {alert.probable_root_cause[:80]}"
+                corr_section += "\n"
+
+        # Same namespace alerts (dependency issues)
+        if corr.same_namespace_alerts:
+            corr_section += (
+                f"\n### Same Namespace Alerts ({len(corr.same_namespace_alerts)} alerts)\n"
+            )
+            corr_section += "Other services in the same namespace that may be related:\n"
+            for alert in corr.same_namespace_alerts[:5]:
+                time_diff = (state.alert.timestamp - alert.timestamp).total_seconds() / 60
+                corr_section += f"  - {alert.service_name}: {alert.alert_name} ({alert.severity}) - {time_diff:.0f}min ago\n"
+
+        # Dependency/infrastructure alerts
+        if corr.dependency_alerts:
+            corr_section += (
+                f"\n### Infrastructure/Dependency Alerts ({len(corr.dependency_alerts)} alerts)\n"
+            )
+            corr_section += "Database, cache, network, and other infrastructure alerts:\n"
+            for alert in corr.dependency_alerts[:5]:
+                time_diff = (state.alert.timestamp - alert.timestamp).total_seconds() / 60
+                corr_section += f"  - {alert.service_name}: {alert.alert_name} ({alert.severity}) - {time_diff:.0f}min ago\n"
+
+        if corr.query_errors:
+            corr_section += "\n**Query Errors:**\n"
+            for err in corr.query_errors:
+                corr_section += f"  - {err}\n"
+
+        sections.append(corr_section)
+    else:
+        sections.append("## Correlated Alerts\nNo historical alert data available.\n")
+
     # Execution errors
     if state.errors:
         sections.append("## Data Collection Errors\n" + "\n".join(f"- {e}" for e in state.errors))
@@ -391,12 +469,16 @@ async def synthesize(state: AgentState) -> StateUpdate:
 {analysis_prompt}
 
 IMPORTANT ANALYSIS FOCUS:
+- **CORRELATED ALERTS**: First check the "Correlated Alerts" section for potential root causes.
+  If there are infrastructure alerts (database, network, cache) that occurred BEFORE this alert,
+  they are likely the root cause. Mention them explicitly in your analysis.
 - If Kubernetes data shows CrashLoopBackOff or Pending pods, analyze the container configuration deeply
 - Check readiness/liveness probes for any that are obviously failing (e.g., exec probes with command "false")
 - Look for misconfigurations in command, args, environment variables
 - If probes are configured, analyze their failure thresholds and initial delays
 - Consider if pod logs indicate the actual error
 - Cross-reference Kubernetes pod conditions with container state details
+- If multiple services in the same namespace are affected, consider shared dependencies
 
 Respond with a JSON object containing:
 - summary: Brief 1-2 sentence summary

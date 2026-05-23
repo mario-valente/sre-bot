@@ -101,6 +101,10 @@ class Settings(BaseSettings):
         default="http://localhost:9090",
         description="Prometheus server URL",
     )
+    alertmanager_url: str = Field(
+        default="http://localhost:9093",
+        description="Alertmanager server URL",
+    )
     loki_url: str = Field(
         default="http://localhost:3100",
         description="Loki server URL",
@@ -173,6 +177,10 @@ class Settings(BaseSettings):
     recent_deploy_hours: int = Field(
         default=2,
         description="Consider deploys within this window as 'recent'",
+    )
+    correlation_window_minutes: int = Field(
+        default=120,
+        description="Time window to search for correlated alerts (default: 2 hours)",
     )
 
 

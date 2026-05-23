@@ -273,6 +273,145 @@ class IncidentRepository:
 
         return feedback
 
+    async def get_correlated_alerts(
+        self,
+        current_alert_timestamp: datetime,
+        service_name: str,
+        namespace: str,
+        time_window_minutes: int = 120,
+        exclude_incident_id: int | None = None,
+    ) -> dict[str, Sequence[Incident]]:
+        """
+        Find potentially related alerts that occurred before the current alert.
+
+        This method searches for alerts that may have caused or contributed
+        to the current incident by looking at:
+        - Recent alerts from the same service
+        - Recent alerts in the same namespace (potential dependencies)
+        - Infrastructure alerts that could affect multiple services
+
+        Args:
+            current_alert_timestamp: Timestamp of the current alert.
+            service_name: Name of the affected service.
+            namespace: Kubernetes namespace.
+            time_window_minutes: How far back to search (default: 2 hours).
+            exclude_incident_id: Incident ID to exclude (current incident).
+
+        Returns:
+            Dictionary with categorized related alerts:
+            - same_service: Alerts for the same service
+            - same_namespace: Alerts in the same namespace (different services)
+            - infrastructure: Alerts that may indicate infrastructure issues
+        """
+        window_start = current_alert_timestamp - timedelta(minutes=time_window_minutes)
+
+        # Infrastructure-related keywords that often indicate root causes
+        infra_keywords = [
+            "database",
+            "db",
+            "postgres",
+            "mysql",
+            "redis",
+            "kafka",
+            "network",
+            "dns",
+            "connection",
+            "timeout",
+            "oom",
+            "memory",
+            "cpu",
+            "disk",
+            "node",
+            "cluster",
+            "istio",
+            "envoy",
+        ]
+
+        # Query for same service alerts
+        same_service_query = (
+            select(Incident)
+            .where(
+                Incident.service_name == service_name,
+                Incident.alert_timestamp >= window_start,
+                Incident.alert_timestamp < current_alert_timestamp,
+            )
+            .order_by(Incident.alert_timestamp.desc())
+            .limit(10)
+        )
+
+        if exclude_incident_id:
+            same_service_query = same_service_query.where(Incident.id != exclude_incident_id)
+
+        same_service_result = await self.session.execute(same_service_query)
+        same_service_alerts = same_service_result.scalars().all()
+
+        # Query for same namespace alerts (different services)
+        same_namespace_query = (
+            select(Incident)
+            .where(
+                Incident.namespace == namespace,
+                Incident.service_name != service_name,
+                Incident.alert_timestamp >= window_start,
+                Incident.alert_timestamp < current_alert_timestamp,
+            )
+            .order_by(Incident.alert_timestamp.desc())
+            .limit(15)
+        )
+
+        if exclude_incident_id:
+            same_namespace_query = same_namespace_query.where(Incident.id != exclude_incident_id)
+
+        same_namespace_result = await self.session.execute(same_namespace_query)
+        same_namespace_alerts = same_namespace_result.scalars().all()
+
+        # Query for all recent alerts to filter for infrastructure
+        all_recent_query = (
+            select(Incident)
+            .where(
+                Incident.alert_timestamp >= window_start,
+                Incident.alert_timestamp < current_alert_timestamp,
+                Incident.service_name != service_name,
+            )
+            .order_by(Incident.alert_timestamp.desc())
+            .limit(50)
+        )
+
+        if exclude_incident_id:
+            all_recent_query = all_recent_query.where(Incident.id != exclude_incident_id)
+
+        all_recent_result = await self.session.execute(all_recent_query)
+        all_recent_alerts = all_recent_result.scalars().all()
+
+        # Filter for infrastructure-related alerts
+        infra_alerts = []
+        for incident in all_recent_alerts:
+            alert_lower = incident.alert_name.lower()
+            service_lower = incident.service_name.lower()
+            description_lower = (incident.alert_description or "").lower()
+
+            for keyword in infra_keywords:
+                if (
+                    keyword in alert_lower
+                    or keyword in service_lower
+                    or keyword in description_lower
+                ):
+                    infra_alerts.append(incident)
+                    break
+
+        self._log.info(
+            "correlated alerts found",
+            same_service=len(same_service_alerts),
+            same_namespace=len(same_namespace_alerts),
+            infrastructure=len(infra_alerts),
+            time_window_minutes=time_window_minutes,
+        )
+
+        return {
+            "same_service": same_service_alerts,
+            "same_namespace": same_namespace_alerts,
+            "infrastructure": infra_alerts,
+        }
+
     async def get_stats(
         self,
         days: int = 30,

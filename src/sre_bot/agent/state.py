@@ -364,6 +364,52 @@ class KubernetesData(BaseModel):
     )
 
 
+class CorrelatedAlert(BaseModel):
+    """Summary of a potentially related past alert."""
+
+    alert_name: str = Field(description="Name of the past alert")
+    service_name: str = Field(description="Service that triggered the alert")
+    severity: str = Field(description="Alert severity")
+    timestamp: datetime = Field(description="When the alert was triggered")
+    probable_root_cause: str | None = Field(default=None, description="Root cause if analyzed")
+    summary: str | None = Field(default=None, description="Brief summary of the incident")
+    confidence: str | None = Field(default=None, description="Analysis confidence level")
+
+
+class CorrelatedAlertsData(BaseModel):
+    """
+    Data about potentially related alerts from recent history.
+
+    Used to identify patterns, recurring issues, or cascading failures
+    where one alert might be caused by another (e.g., DB down -> API errors).
+    """
+
+    same_service_alerts: list[CorrelatedAlert] = Field(
+        default_factory=list,
+        description="Recent alerts for the same service",
+    )
+    same_namespace_alerts: list[CorrelatedAlert] = Field(
+        default_factory=list,
+        description="Recent alerts in the same namespace (potential dependency issues)",
+    )
+    dependency_alerts: list[CorrelatedAlert] = Field(
+        default_factory=list,
+        description="Alerts from known dependencies (databases, queues, etc.)",
+    )
+    potential_root_cause_alerts: list[CorrelatedAlert] = Field(
+        default_factory=list,
+        description="Alerts that may have caused this incident (e.g., infra issues)",
+    )
+    time_window_minutes: int = Field(
+        default=120,
+        description="Time window used to search for correlated alerts",
+    )
+    query_errors: list[str] = Field(
+        default_factory=list,
+        description="Errors encountered during correlation queries",
+    )
+
+
 class IncidentAnalysis(BaseModel):
     """
     Final analysis synthesized by the LLM.
@@ -421,6 +467,9 @@ class AgentState(BaseModel):
     github: GitHubData | None = Field(default=None, description="GitHub changes data")
     kubernetes: KubernetesData | None = Field(
         default=None, description="Kubernetes cluster data (pods, events, logs)"
+    )
+    correlated_alerts: CorrelatedAlertsData | None = Field(
+        default=None, description="Related alerts from recent history for correlation analysis"
     )
 
     # === Output ===
