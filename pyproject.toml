@@ -94,7 +94,7 @@ ignore = [
 known-first-party = ["sre_bot"]
 
 [tool.mypy]
-python_version = "0.1.1"
+python_version = "3.11"
 strict = true
 warn_return_any = true
 warn_unused_ignores = true

@@ -31,7 +31,7 @@ jobs:
           version: "latest"
 
       - name: Install dependencies
-        run: uv sync --dev
+        run: uv sync --all-extras
 
       - name: Run ruff check
         run: uv run ruff check src/ tests/
@@ -57,7 +57,7 @@ jobs:
           version: "latest"
 
       - name: Install dependencies
-        run: uv sync --dev
+        run: uv sync --all-extras
 
       - name: Run mypy
         run: uv run mypy src/ --ignore-missing-imports
@@ -80,7 +80,7 @@ jobs:
           version: "latest"
 
       - name: Install dependencies
-        run: uv sync --dev
+        run: uv sync --all-extras
 
       - name: Run tests
         run: uv run pytest tests/ -v --tb=short
