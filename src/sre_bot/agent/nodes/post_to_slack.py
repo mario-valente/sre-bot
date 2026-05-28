@@ -3,6 +3,7 @@
 import structlog
 
 from sre_bot.agent.state import AgentState, IncidentAnalysis, StateUpdate
+from sre_bot.db.repository import IncidentRepository, LearnedSolutionRepository, get_session
 
 logger = structlog.get_logger()
 
@@ -37,7 +38,35 @@ async def post_to_slack(state: AgentState) -> StateUpdate:
 
     log.info("posting analysis to Slack")
 
+    incident_id = None
+
     try:
+        # Save incident to database first
+        try:
+            session = get_session()
+            try:
+                repo = IncidentRepository(session)
+                incident = await repo.create_from_state(state, source="slack")
+                incident_id = incident.id
+                log.info("incident saved to database", incident_id=incident_id)
+
+                # If a historical solution was used, record its usage
+                if state.analysis.used_historical_solution_id:
+                    solution_repo = LearnedSolutionRepository(session)
+                    await solution_repo.record_usage(
+                        solution_id=state.analysis.used_historical_solution_id,
+                        was_successful=True,  # Assume success initially; feedback will correct
+                    )
+                    log.info(
+                        "recorded historical solution usage",
+                        solution_id=state.analysis.used_historical_solution_id,
+                    )
+            finally:
+                await session.close()
+        except Exception as db_error:
+            log.warning("failed to save incident to database", error=str(db_error))
+            # Continue with Slack posting even if DB fails
+
         # Import here to avoid circular imports and allow mocking
         from slack_sdk.web.async_client import AsyncWebClient
 
@@ -62,6 +91,11 @@ async def post_to_slack(state: AgentState) -> StateUpdate:
 
         # Format message
         blocks = _format_analysis_blocks(state.alert, state.analysis)
+
+        # Add feedback buttons if incident was saved
+        if incident_id:
+            blocks.extend(_build_feedback_blocks(incident_id))
+
         text = _format_analysis_text(state.alert, state.analysis)
 
         # Post message
@@ -75,7 +109,7 @@ async def post_to_slack(state: AgentState) -> StateUpdate:
         )
 
         message_ts = response.get("ts")
-        log.info("analysis posted to Slack", message_ts=message_ts)
+        log.info("analysis posted to Slack", message_ts=message_ts, incident_id=incident_id)
 
         return {"slack_message_ts": message_ts}
 
@@ -245,3 +279,47 @@ def _format_analysis_text(alert, analysis: IncidentAnalysis) -> str:
         lines.append(f":rotating_light: *Human Escalation Required* - {analysis.escalation_reason}")
 
     return "\n".join(lines)
+
+
+def _build_feedback_blocks(incident_id: int) -> list[dict]:
+    """
+    Build Slack blocks for feedback buttons.
+
+    Args:
+        incident_id: ID of the incident to provide feedback for.
+
+    Returns:
+        List of Slack blocks with feedback buttons.
+    """
+    return [
+        {"type": "divider"},
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": "*Was this analysis helpful?* Your feedback helps improve future analyses.",
+            },
+        },
+        {
+            "type": "actions",
+            "elements": [
+                {
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": "Correct", "emoji": True},
+                    "style": "primary",
+                    "action_id": f"feedback_correct_{incident_id}",
+                },
+                {
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": "Partially Correct", "emoji": True},
+                    "action_id": f"feedback_partial_{incident_id}",
+                },
+                {
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": "Incorrect", "emoji": True},
+                    "style": "danger",
+                    "action_id": f"feedback_incorrect_{incident_id}",
+                },
+            ],
+        },
+    ]

@@ -3,6 +3,7 @@
 from sre_bot.agent.nodes.extract_context import extract_context
 from sre_bot.agent.nodes.fetch_correlated_alerts import fetch_correlated_alerts
 from sre_bot.agent.nodes.fetch_github import fetch_github
+from sre_bot.agent.nodes.fetch_historical_solutions import fetch_historical_solutions
 from sre_bot.agent.nodes.fetch_kubernetes import fetch_kubernetes
 from sre_bot.agent.nodes.fetch_logs import fetch_logs
 from sre_bot.agent.nodes.fetch_metrics import fetch_metrics
@@ -17,6 +18,7 @@ __all__ = [
     "fetch_traces",
     "fetch_kubernetes",
     "fetch_correlated_alerts",
+    "fetch_historical_solutions",
     "fetch_github",
     "synthesize",
     "post_to_slack",

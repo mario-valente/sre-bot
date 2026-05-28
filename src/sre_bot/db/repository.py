@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from sre_bot.agent.state import AgentState
 from sre_bot.config import get_settings
-from sre_bot.db.models import Base, Incident, IncidentFeedback
+from sre_bot.db.models import Base, Incident, IncidentFeedback, LearnedSolution
 
 logger = structlog.get_logger()
 
@@ -473,3 +473,270 @@ class IncidentRepository:
             "average_duration_seconds": avg_duration,
             "period_days": days,
         }
+
+
+class LearnedSolutionRepository:
+    """Repository for learned solutions CRUD operations."""
+
+    def __init__(self, session: AsyncSession):
+        self.session = session
+        self._log = logger.bind(repository="learned_solution")
+
+    async def create(
+        self,
+        alert_name: str,
+        service_name: str,
+        root_cause: str,
+        solution_steps: list[str],
+        namespace: str | None = None,
+        error_pattern: str | None = None,
+        symptoms: list[str] | None = None,
+        prevention_tips: list[str] | None = None,
+        source_incident_id: int | None = None,
+        validated_by: str | None = None,
+    ) -> LearnedSolution:
+        """
+        Create a new learned solution.
+
+        Args:
+            alert_name: Name of the alert this solution applies to.
+            service_name: Service this solution applies to.
+            root_cause: The root cause that was identified.
+            solution_steps: Steps to resolve the issue.
+            namespace: Optional namespace filter.
+            error_pattern: Regex or text pattern for error matching.
+            symptoms: List of symptoms to identify this issue.
+            prevention_tips: How to prevent this in the future.
+            source_incident_id: Original incident this was learned from.
+            validated_by: User who validated this solution.
+
+        Returns:
+            Created LearnedSolution record.
+        """
+        solution = LearnedSolution(
+            alert_name=alert_name,
+            service_name=service_name,
+            namespace=namespace,
+            error_pattern=error_pattern,
+            symptoms=symptoms,
+            root_cause=root_cause,
+            solution_steps=solution_steps,
+            prevention_tips=prevention_tips,
+            source_incident_id=source_incident_id,
+            validated_by=validated_by,
+        )
+
+        self.session.add(solution)
+        await self.session.commit()
+        await self.session.refresh(solution)
+
+        self._log.info(
+            "learned solution created",
+            solution_id=solution.id,
+            alert_name=alert_name,
+            service_name=service_name,
+        )
+
+        return solution
+
+    async def create_from_incident(
+        self,
+        incident: Incident,
+        validated_by: str | None = None,
+        additional_tips: list[str] | None = None,
+    ) -> LearnedSolution:
+        """
+        Create a learned solution from a validated incident.
+
+        Args:
+            incident: Incident with successful analysis.
+            validated_by: User who validated this solution.
+            additional_tips: Extra prevention tips to add.
+
+        Returns:
+            Created LearnedSolution record.
+        """
+        # Extract symptoms from the incident data
+        symptoms = []
+        if incident.contributing_factors:
+            symptoms.extend(incident.contributing_factors)
+
+        # Build solution steps from suggested actions
+        solution_steps = incident.suggested_actions or ["Review the incident analysis"]
+
+        return await self.create(
+            alert_name=incident.alert_name,
+            service_name=incident.service_name,
+            namespace=incident.namespace,
+            root_cause=incident.probable_root_cause or "Unknown",
+            solution_steps=solution_steps,
+            symptoms=symptoms if symptoms else None,
+            prevention_tips=additional_tips,
+            source_incident_id=incident.id,
+            validated_by=validated_by,
+        )
+
+    async def find_similar(
+        self,
+        alert_name: str,
+        service_name: str,
+        namespace: str | None = None,
+        limit: int = 5,
+    ) -> Sequence[LearnedSolution]:
+        """
+        Find similar learned solutions for an alert.
+
+        Matching priority:
+        1. Exact match on alert_name + service_name + namespace
+        2. Exact match on alert_name + service_name
+        3. Same service_name with similar alert patterns
+        4. Same alert_name across services (generic solutions)
+
+        Args:
+            alert_name: Current alert name.
+            service_name: Current service name.
+            namespace: Current namespace.
+            limit: Maximum results.
+
+        Returns:
+            List of similar solutions, ordered by relevance.
+        """
+        solutions = []
+
+        # Priority 1: Exact match with namespace
+        if namespace:
+            exact_query = (
+                select(LearnedSolution)
+                .where(
+                    LearnedSolution.alert_name == alert_name,
+                    LearnedSolution.service_name == service_name,
+                    LearnedSolution.namespace == namespace,
+                )
+                .order_by(LearnedSolution.success_count.desc())
+                .limit(limit)
+            )
+            result = await self.session.execute(exact_query)
+            solutions.extend(result.scalars().all())
+
+        # Priority 2: Same alert + service (any namespace)
+        if len(solutions) < limit:
+            remaining = limit - len(solutions)
+            existing_ids = [s.id for s in solutions]
+
+            service_query = (
+                select(LearnedSolution)
+                .where(
+                    LearnedSolution.alert_name == alert_name,
+                    LearnedSolution.service_name == service_name,
+                    LearnedSolution.id.notin_(existing_ids) if existing_ids else True,
+                )
+                .order_by(LearnedSolution.success_count.desc())
+                .limit(remaining)
+            )
+            result = await self.session.execute(service_query)
+            solutions.extend(result.scalars().all())
+
+        # Priority 3: Same service, different alerts (service-specific patterns)
+        if len(solutions) < limit:
+            remaining = limit - len(solutions)
+            existing_ids = [s.id for s in solutions]
+
+            same_service_query = (
+                select(LearnedSolution)
+                .where(
+                    LearnedSolution.service_name == service_name,
+                    LearnedSolution.id.notin_(existing_ids) if existing_ids else True,
+                )
+                .order_by(LearnedSolution.success_count.desc())
+                .limit(remaining)
+            )
+            result = await self.session.execute(same_service_query)
+            solutions.extend(result.scalars().all())
+
+        # Priority 4: Same alert name across services (generic solutions)
+        if len(solutions) < limit:
+            remaining = limit - len(solutions)
+            existing_ids = [s.id for s in solutions]
+
+            generic_query = (
+                select(LearnedSolution)
+                .where(
+                    LearnedSolution.alert_name == alert_name,
+                    LearnedSolution.id.notin_(existing_ids) if existing_ids else True,
+                )
+                .order_by(LearnedSolution.success_count.desc())
+                .limit(remaining)
+            )
+            result = await self.session.execute(generic_query)
+            solutions.extend(result.scalars().all())
+
+        self._log.info(
+            "found similar solutions",
+            alert_name=alert_name,
+            service_name=service_name,
+            count=len(solutions),
+        )
+
+        return solutions
+
+    async def record_usage(
+        self,
+        solution_id: int,
+        was_successful: bool,
+    ) -> None:
+        """
+        Record that a solution was used and whether it was successful.
+
+        Args:
+            solution_id: ID of the solution used.
+            was_successful: Whether the solution resolved the issue.
+        """
+        solution = await self.session.get(LearnedSolution, solution_id)
+        if solution:
+            solution.times_used += 1
+            solution.last_used_at = datetime.utcnow()
+            if was_successful:
+                solution.success_count += 1
+            else:
+                solution.failure_count += 1
+
+            await self.session.commit()
+
+            self._log.info(
+                "solution usage recorded",
+                solution_id=solution_id,
+                was_successful=was_successful,
+                total_uses=solution.times_used,
+            )
+
+    async def get_top_solutions(
+        self,
+        service_name: str | None = None,
+        limit: int = 10,
+    ) -> Sequence[LearnedSolution]:
+        """
+        Get top performing solutions.
+
+        Args:
+            service_name: Optional filter by service.
+            limit: Maximum results.
+
+        Returns:
+            Solutions ordered by success count.
+        """
+        query = (
+            select(LearnedSolution)
+            .where(LearnedSolution.success_count > 0)
+            .order_by(LearnedSolution.success_count.desc())
+            .limit(limit)
+        )
+
+        if service_name:
+            query = query.where(LearnedSolution.service_name == service_name)
+
+        result = await self.session.execute(query)
+        return result.scalars().all()
+
+    async def get_by_id(self, solution_id: int) -> LearnedSolution | None:
+        """Get solution by ID."""
+        return await self.session.get(LearnedSolution, solution_id)

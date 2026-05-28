@@ -8,6 +8,7 @@ from sre_bot.agent.nodes import (
     extract_context,
     fetch_correlated_alerts,
     fetch_github,
+    fetch_historical_solutions,
     fetch_kubernetes,
     fetch_logs,
     fetch_metrics,
@@ -34,12 +35,12 @@ def build_graph() -> CompiledStateGraph:
                                    ▼
                             extract_context
                                    │
-        ┌───────────┬───────┬──────┼──────┬───────────┬────────────────────┐
-        │           │       │      │      │           │                    │
-        ▼           ▼       ▼      ▼      ▼           ▼                    ▼
-    fetch_metrics fetch_logs fetch_traces fetch_kubernetes fetch_correlated_alerts  (parallel)
-        │           │       │      │      │           │                    │
-        └───────────┴───────┴──────┼──────┴───────────┴────────────────────┘
+        ┌───────────┬───────┬──────┼──────┬───────────┬──────────────────────┬────────────────────────┐
+        │           │       │      │      │           │                      │                        │
+        ▼           ▼       ▼      ▼      ▼           ▼                      ▼                        ▼
+    fetch_metrics fetch_logs fetch_traces fetch_kubernetes fetch_correlated_alerts fetch_historical_solutions (parallel)
+        │           │       │      │      │           │                      │                        │
+        └───────────┴───────┴──────┼──────┴───────────┴──────────────────────┴────────────────────────┘
                                    │
                                    ▼
                              fetch_github
@@ -70,6 +71,7 @@ def build_graph() -> CompiledStateGraph:
     graph.add_node("fetch_traces", fetch_traces)
     graph.add_node("fetch_kubernetes", fetch_kubernetes)
     graph.add_node("fetch_correlated_alerts", fetch_correlated_alerts)
+    graph.add_node("fetch_historical_solutions", fetch_historical_solutions)
     graph.add_node("fetch_github", fetch_github)
     graph.add_node("synthesize", synthesize)
     graph.add_node("post_to_slack", post_to_slack)
@@ -79,12 +81,13 @@ def build_graph() -> CompiledStateGraph:
     # Start → extract_context
     graph.add_edge(START, "extract_context")
 
-    # extract_context → parallel fan-out to metrics, logs, traces, kubernetes, correlated_alerts
+    # extract_context → parallel fan-out to all data collection nodes
     graph.add_edge("extract_context", "fetch_metrics")
     graph.add_edge("extract_context", "fetch_logs")
     graph.add_edge("extract_context", "fetch_traces")
     graph.add_edge("extract_context", "fetch_kubernetes")
     graph.add_edge("extract_context", "fetch_correlated_alerts")
+    graph.add_edge("extract_context", "fetch_historical_solutions")
 
     # Parallel fan-in: all observability nodes → fetch_github
     graph.add_edge("fetch_metrics", "fetch_github")
@@ -92,6 +95,7 @@ def build_graph() -> CompiledStateGraph:
     graph.add_edge("fetch_traces", "fetch_github")
     graph.add_edge("fetch_kubernetes", "fetch_github")
     graph.add_edge("fetch_correlated_alerts", "fetch_github")
+    graph.add_edge("fetch_historical_solutions", "fetch_github")
 
     # Sequential: fetch_github → synthesize → post_to_slack → END
     graph.add_edge("fetch_github", "synthesize")

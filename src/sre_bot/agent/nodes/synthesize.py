@@ -27,6 +27,19 @@ Guidelines:
 - Set confidence based on evidence strength (high/medium/low)
 - Flag for escalation if: data loss risk, security concern, or widespread impact
 
+### Historical Solutions Analysis Instructions:
+When historical solutions are available:
+1. **PRIORITIZE exact matches**: If there's an exact match (same alert + service), strongly consider
+   using that solution as the primary recommendation - it worked before!
+2. **Validate against current evidence**: Check if the historical root cause matches current symptoms.
+   If metrics, logs, or traces confirm the same pattern, confidence should be HIGH.
+3. **Adapt solutions if needed**: If the situation is similar but not identical, adapt the solution
+   steps to the current context while crediting the historical solution.
+4. **Track solution usage**: If you recommend a historical solution, include its ID in
+   `used_historical_solution_id` so we can track effectiveness.
+5. **Success rate matters**: Solutions with high success rates (>80%) are more reliable.
+   Be cautious with solutions that have low success rates.
+
 ### Alert Correlation Analysis Instructions:
 When analyzing correlated alerts, consider:
 1. **Cascading Failures**: An infrastructure alert (database, cache, network) happening BEFORE
@@ -368,6 +381,43 @@ def _build_analysis_prompt(state: AgentState) -> str:
     else:
         sections.append("## Recent Changes\nNo GitHub data available.\n")
 
+    # Historical Solutions
+    if state.historical_solutions and state.historical_solutions.total_found > 0:
+        hist = state.historical_solutions
+        hist_section = "## Historical Solutions (Learned from Past Incidents)\n"
+        hist_section += (
+            "**IMPORTANT:** These are validated solutions from similar past incidents.\n\n"
+        )
+
+        if hist.exact_matches:
+            hist_section += "### Exact Matches (Same Alert + Service)\n"
+            hist_section += "These solutions resolved the EXACT same issue before:\n\n"
+            for sol in hist.exact_matches:
+                hist_section += f"**Solution ID: {sol.id}** (Used {sol.times_used}x, {sol.success_rate:.0%} success rate)\n"
+                hist_section += f"  - **Root Cause:** {sol.root_cause}\n"
+                hist_section += "  - **Solution Steps:**\n"
+                for i, step in enumerate(sol.solution_steps, 1):
+                    hist_section += f"    {i}. {step}\n"
+                if sol.symptoms:
+                    hist_section += f"  - **Symptoms:** {', '.join(sol.symptoms)}\n"
+                hist_section += "\n"
+
+        if hist.similar_solutions:
+            hist_section += "### Similar Solutions (Related Issues)\n"
+            hist_section += "These solutions may be applicable:\n\n"
+            for sol in hist.similar_solutions[:3]:
+                hist_section += f"**{sol.alert_name}** on {sol.service_name} (ID: {sol.id})\n"
+                hist_section += f"  - **Root Cause:** {sol.root_cause}\n"
+                hist_section += (
+                    f"  - **Success Rate:** {sol.success_rate:.0%} ({sol.times_used} uses)\n\n"
+                )
+
+        sections.append(hist_section)
+    else:
+        sections.append(
+            "## Historical Solutions\nNo learned solutions found for this alert type.\n"
+        )
+
     # Correlated Alerts
     if state.correlated_alerts:
         corr = state.correlated_alerts
@@ -489,6 +539,7 @@ Respond with a JSON object containing:
 - confidence: "high", "medium", or "low"
 - needs_human_escalation: true/false
 - escalation_reason: Reason if escalation needed (optional)
+- used_historical_solution_id: ID of historical solution if you're recommending one (optional, integer)
 """
             ),
         ]
@@ -556,6 +607,7 @@ def _parse_llm_response(response_text: str, log) -> IncidentAnalysis:
                 confidence=data.get("confidence", "low"),
                 needs_human_escalation=data.get("needs_human_escalation", False),
                 escalation_reason=data.get("escalation_reason"),
+                used_historical_solution_id=data.get("used_historical_solution_id"),
             )
         except json.JSONDecodeError as e:
             log.warning("failed to parse JSON response", error=str(e))

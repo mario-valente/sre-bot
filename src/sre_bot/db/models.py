@@ -121,3 +121,66 @@ class IncidentFeedback(Base):
 
     def __repr__(self) -> str:
         return f"<IncidentFeedback(id={self.id}, incident_id={self.incident_id}, type={self.feedback_type})>"
+
+
+class LearnedSolution(Base):
+    """
+    Validated solutions learned from past incidents.
+
+    Stores successful resolutions that can be used as context
+    for future similar alerts.
+    """
+
+    __tablename__ = "learned_solutions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+
+    # Alert identification (for matching similar alerts)
+    alert_name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    service_name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    namespace: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+
+    # Problem identification
+    error_pattern: Mapped[str | None] = mapped_column(Text, nullable=True)
+    symptoms: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+
+    # Solution data
+    root_cause: Mapped[str] = mapped_column(Text, nullable=False)
+    solution_steps: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    prevention_tips: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+
+    # Effectiveness tracking
+    times_used: Mapped[int] = mapped_column(Integer, default=0)
+    success_count: Mapped[int] = mapped_column(Integer, default=0)
+    failure_count: Mapped[int] = mapped_column(Integer, default=0)
+
+    # Source tracking
+    source_incident_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("incidents.id"), nullable=True
+    )
+    validated_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    # Relationships
+    source_incident: Mapped["Incident | None"] = relationship(
+        "Incident", foreign_keys=[source_incident_id]
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<LearnedSolution(id={self.id}, alert={self.alert_name}, service={self.service_name})>"
+        )
+
+    @property
+    def success_rate(self) -> float:
+        """Calculate success rate of this solution."""
+        total = self.success_count + self.failure_count
+        if total == 0:
+            return 0.0
+        return self.success_count / total
