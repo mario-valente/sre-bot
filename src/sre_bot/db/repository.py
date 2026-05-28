@@ -2,6 +2,7 @@
 
 from collections.abc import Sequence
 from datetime import datetime, timedelta
+from typing import Any
 
 import structlog
 from sqlalchemy import select
@@ -415,7 +416,7 @@ class IncidentRepository:
     async def get_stats(
         self,
         days: int = 30,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """
         Get incident statistics.
 
@@ -434,8 +435,8 @@ class IncidentRepository:
 
         # Calculate stats
         total = len(incidents)
-        by_severity = {}
-        by_service = {}
+        by_severity: dict[str, int] = {}
+        by_service: dict[str, int] = {}
         escalated = 0
         with_analysis = 0
         avg_duration = 0.0
@@ -601,7 +602,7 @@ class LearnedSolutionRepository:
         Returns:
             List of similar solutions, ordered by relevance.
         """
-        solutions = []
+        solutions: list[LearnedSolution] = []
 
         # Priority 1: Exact match with namespace
         if namespace:
@@ -623,15 +624,14 @@ class LearnedSolutionRepository:
             remaining = limit - len(solutions)
             existing_ids = [s.id for s in solutions]
 
-            service_query = (
-                select(LearnedSolution)
-                .where(
-                    LearnedSolution.alert_name == alert_name,
-                    LearnedSolution.service_name == service_name,
-                    LearnedSolution.id.notin_(existing_ids) if existing_ids else True,
-                )
-                .order_by(LearnedSolution.success_count.desc())
-                .limit(remaining)
+            service_query = select(LearnedSolution).where(
+                LearnedSolution.alert_name == alert_name,
+                LearnedSolution.service_name == service_name,
+            )
+            if existing_ids:
+                service_query = service_query.where(LearnedSolution.id.notin_(existing_ids))
+            service_query = service_query.order_by(LearnedSolution.success_count.desc()).limit(
+                remaining
             )
             result = await self.session.execute(service_query)
             solutions.extend(result.scalars().all())
@@ -641,15 +641,16 @@ class LearnedSolutionRepository:
             remaining = limit - len(solutions)
             existing_ids = [s.id for s in solutions]
 
-            same_service_query = (
-                select(LearnedSolution)
-                .where(
-                    LearnedSolution.service_name == service_name,
-                    LearnedSolution.id.notin_(existing_ids) if existing_ids else True,
-                )
-                .order_by(LearnedSolution.success_count.desc())
-                .limit(remaining)
+            same_service_query = select(LearnedSolution).where(
+                LearnedSolution.service_name == service_name,
             )
+            if existing_ids:
+                same_service_query = same_service_query.where(
+                    LearnedSolution.id.notin_(existing_ids)
+                )
+            same_service_query = same_service_query.order_by(
+                LearnedSolution.success_count.desc()
+            ).limit(remaining)
             result = await self.session.execute(same_service_query)
             solutions.extend(result.scalars().all())
 
@@ -658,14 +659,13 @@ class LearnedSolutionRepository:
             remaining = limit - len(solutions)
             existing_ids = [s.id for s in solutions]
 
-            generic_query = (
-                select(LearnedSolution)
-                .where(
-                    LearnedSolution.alert_name == alert_name,
-                    LearnedSolution.id.notin_(existing_ids) if existing_ids else True,
-                )
-                .order_by(LearnedSolution.success_count.desc())
-                .limit(remaining)
+            generic_query = select(LearnedSolution).where(
+                LearnedSolution.alert_name == alert_name,
+            )
+            if existing_ids:
+                generic_query = generic_query.where(LearnedSolution.id.notin_(existing_ids))
+            generic_query = generic_query.order_by(LearnedSolution.success_count.desc()).limit(
+                remaining
             )
             result = await self.session.execute(generic_query)
             solutions.extend(result.scalars().all())

@@ -256,7 +256,8 @@ class GitHubClient(GitClient):
             # Filter by time if specified
             if since:
                 pr_time = merged_at or item.get("updated_at")
-                if pr_time and self._parse_datetime(pr_time) < since:
+                parsed_time = self._parse_datetime(pr_time) if pr_time else None
+                if parsed_time and parsed_time < since:
                     continue
 
             prs.append(

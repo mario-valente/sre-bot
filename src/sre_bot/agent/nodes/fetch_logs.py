@@ -77,10 +77,11 @@ async def fetch_logs(state: AgentState) -> StateUpdate:
     query_errors = []
 
     for (name, _), result in zip(queries.items(), results, strict=False):
-        if isinstance(result, Exception):
+        if isinstance(result, BaseException):
             query_errors.append(f"{name}: {str(result)}")
             continue
 
+        # At this point, result is the expected type (not an exception)
         entries = _parse_log_entries(result)
         all_entries.extend(entries)
 

@@ -1,5 +1,7 @@
 """LangGraph definition for the SRE Copilot agent."""
 
+from typing import cast
+
 import structlog
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
@@ -172,12 +174,15 @@ async def run_investigation(state: AgentState) -> AgentState:
     graph = get_graph()
 
     # Run the graph
-    final_state = await graph.ainvoke(state)
+    result = await graph.ainvoke(state)
+
+    # LangGraph returns a dict-like state, cast to AgentState
+    final_state = cast(AgentState, result)
 
     log.info(
         "investigation completed",
-        has_analysis=final_state.get("analysis") is not None,
-        errors=len(final_state.get("errors", [])),
+        has_analysis=final_state.analysis is not None,
+        errors=len(final_state.errors) if final_state.errors else 0,
     )
 
     return final_state

@@ -83,19 +83,19 @@ async def fetch_kubernetes(state: AgentState) -> StateUpdate:
         )
 
         # Process pods
-        if isinstance(pods_result, Exception):
+        if isinstance(pods_result, BaseException):
             query_errors.append(f"Pods: {str(pods_result)}")
         else:
             pods = pods_result
 
         # Process events
-        if isinstance(events_result, Exception):
+        if isinstance(events_result, BaseException):
             query_errors.append(f"Events: {str(events_result)}")
         else:
             events = events_result
 
         # Process deployment
-        if isinstance(deployment_result, Exception):
+        if isinstance(deployment_result, BaseException):
             query_errors.append(f"Deployment: {str(deployment_result)}")
         else:
             deployment = deployment_result
@@ -113,7 +113,7 @@ async def fetch_kubernetes(state: AgentState) -> StateUpdate:
             log_results = await asyncio.gather(*log_tasks, return_exceptions=True)
 
             for pod, result in zip(pods[:3], log_results, strict=False):
-                if isinstance(result, Exception):
+                if isinstance(result, BaseException):
                     query_errors.append(f"Logs for {pod.name}: {str(result)}")
                 elif result:
                     pod_logs[pod.name] = result
@@ -479,7 +479,7 @@ async def _fetch_kube_state_metrics(
     all_queries = {**pod_queries, **deployment_queries}
 
     # Execute queries in parallel
-    results = {}
+    results: dict[str, list[dict[str, Any]]] = {}
     tasks = []
     query_names = []
 
@@ -490,7 +490,7 @@ async def _fetch_kube_state_metrics(
     query_results = await asyncio.gather(*tasks, return_exceptions=True)
 
     for name, result in zip(query_names, query_results, strict=False):
-        if isinstance(result, Exception):
+        if isinstance(result, BaseException):
             log.warning("kube state query failed", query=name, error=str(result))
             results[name] = []
         else:

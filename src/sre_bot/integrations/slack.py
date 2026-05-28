@@ -3,6 +3,7 @@
 import contextlib
 import re
 from datetime import datetime
+from typing import Any
 
 import structlog
 from slack_bolt.adapter.socket_mode.async_handler import AsyncSocketModeHandler
@@ -50,7 +51,7 @@ def _register_handlers(app: AsyncApp) -> None:
     """Register all Slack event handlers."""
 
     @app.event("message")
-    async def handle_message(event: dict, say, client) -> None:
+    async def handle_message(event: dict[str, Any], say: Any, client: Any) -> None:
         """
         Handle incoming messages in alert channels.
 
@@ -112,7 +113,7 @@ def _register_handlers(app: AsyncApp) -> None:
             )
 
     @app.event("app_mention")
-    async def handle_mention(event: dict, say, client) -> None:
+    async def handle_mention(event: dict[str, Any], say: Any, client: Any) -> None:
         """
         Handle direct mentions of the bot.
 
@@ -150,7 +151,7 @@ def _register_handlers(app: AsyncApp) -> None:
         )
 
     @app.action(re.compile(r"^feedback_.*"))
-    async def handle_feedback_action(ack, body, client) -> None:
+    async def handle_feedback_action(ack: Any, body: Any, client: Any) -> None:
         """
         Handle feedback button actions.
 
@@ -245,7 +246,7 @@ def _register_handlers(app: AsyncApp) -> None:
                 )
 
     @app.command("/sre-analyze")
-    async def handle_analyze_command(ack, body, say) -> None:
+    async def handle_analyze_command(ack: Any, body: Any, say: Any) -> None:
         """
         Handle /sre-analyze slash command.
 
@@ -298,10 +299,10 @@ def _register_handlers(app: AsyncApp) -> None:
 
 async def _trigger_manual_investigation(
     service_name: str,
-    event: dict,
-    say,
-    client,  # noqa: ARG001
-    log,
+    event: dict[str, Any],
+    say: Any,
+    client: Any,  # noqa: ARG001
+    log: Any,
 ) -> None:
     """Trigger a manual investigation for a service."""
 
@@ -339,7 +340,7 @@ async def _trigger_manual_investigation(
         )
 
 
-def _parse_slack_alert(text: str, event: dict) -> AlertContext | None:
+def _parse_slack_alert(text: str, event: dict[str, Any]) -> AlertContext | None:
     """
     Parse a Slack message to extract alert context.
 
@@ -408,10 +409,10 @@ it saves the solution and uses it for future similar incidents.
 
 
 def _update_blocks_with_feedback(
-    blocks: list[dict],
+    blocks: list[dict[str, Any]],
     feedback_type: str,
     username: str,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Update message blocks to show feedback was received."""
     updated_blocks = []
 
@@ -459,7 +460,7 @@ def _update_blocks_with_feedback(
     return updated_blocks
 
 
-def build_feedback_blocks(incident_id: int) -> list[dict]:
+def build_feedback_blocks(incident_id: int) -> list[dict[str, Any]]:
     """
     Build Slack blocks for feedback buttons.
 
