@@ -410,6 +410,43 @@ class CorrelatedAlertsData(BaseModel):
     )
 
 
+class HistoricalSolution(BaseModel):
+    """A learned solution from past incidents."""
+
+    id: int = Field(description="Solution ID for tracking")
+    alert_name: str = Field(description="Alert name this solution applies to")
+    service_name: str = Field(description="Service this solution applies to")
+    root_cause: str = Field(description="The identified root cause")
+    solution_steps: list[str] = Field(description="Steps to resolve the issue")
+    success_rate: float = Field(default=0.0, description="Success rate of this solution")
+    times_used: int = Field(default=0, description="Number of times this solution was applied")
+    symptoms: list[str] = Field(
+        default_factory=list, description="Symptoms that identify this issue"
+    )
+
+
+class HistoricalSolutionsData(BaseModel):
+    """
+    Historical solutions from past incidents.
+
+    Contains validated solutions that can help resolve similar alerts.
+    """
+
+    exact_matches: list[HistoricalSolution] = Field(
+        default_factory=list,
+        description="Solutions for exact same alert and service",
+    )
+    similar_solutions: list[HistoricalSolution] = Field(
+        default_factory=list,
+        description="Solutions for similar alerts or services",
+    )
+    total_found: int = Field(default=0, description="Total solutions found")
+    query_errors: list[str] = Field(
+        default_factory=list,
+        description="Errors encountered during solution queries",
+    )
+
+
 class IncidentAnalysis(BaseModel):
     """
     Final analysis synthesized by the LLM.
@@ -447,6 +484,10 @@ class IncidentAnalysis(BaseModel):
         default=None,
         description="Reason for escalation if needed",
     )
+    used_historical_solution_id: int | None = Field(
+        default=None,
+        description="ID of historical solution that was applied (for feedback tracking)",
+    )
 
 
 class AgentState(BaseModel):
@@ -470,6 +511,9 @@ class AgentState(BaseModel):
     )
     correlated_alerts: CorrelatedAlertsData | None = Field(
         default=None, description="Related alerts from recent history for correlation analysis"
+    )
+    historical_solutions: HistoricalSolutionsData | None = Field(
+        default=None, description="Learned solutions from similar past incidents"
     )
 
     # === Output ===

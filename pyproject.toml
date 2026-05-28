@@ -69,7 +69,7 @@ build-backend = "hatchling.build"
 packages = ["src/sre_bot"]
 
 [tool.ruff]
-target-version = "0.1.1"
+target-version = "py311"
 line-length = 100
 src = ["src", "tests"]
 
