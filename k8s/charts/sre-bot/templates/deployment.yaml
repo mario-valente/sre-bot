@@ -1,17 +1,17 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "sre-copilot.fullname" . }}
+  name: {{ include "sre-bot.fullname" . }}
   namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "sre-copilot.labels" . | nindent 4 }}
+    {{- include "sre-bot.labels" . | nindent 4 }}
 spec:
   {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
   {{- end }}
   selector:
     matchLabels:
-      {{- include "sre-copilot.selectorLabels" . | nindent 6 }}
+      {{- include "sre-bot.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       annotations:
@@ -20,13 +20,13 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
       labels:
-        {{- include "sre-copilot.selectorLabels" . | nindent 8 }}
+        {{- include "sre-bot.selectorLabels" . | nindent 8 }}
     spec:
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      serviceAccountName: {{ include "sre-copilot.serviceAccountName" . }}
+      serviceAccountName: {{ include "sre-bot.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
@@ -41,9 +41,9 @@ spec:
               protocol: TCP
           envFrom:
             - configMapRef:
-                name: {{ include "sre-copilot.fullname" . }}-config
+                name: {{ include "sre-bot.fullname" . }}-config
             - secretRef:
-                name: {{ include "sre-copilot.secretName" . }}
+                name: {{ include "sre-bot.secretName" . }}
           {{- with .Values.extraEnv }}
           env:
             {{- toYaml . | nindent 12 }}

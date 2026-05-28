@@ -2,15 +2,15 @@
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: {{ include "sre-copilot.fullname" . }}
+  name: {{ include "sre-bot.fullname" . }}
   namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "sre-copilot.labels" . | nindent 4 }}
+    {{- include "sre-bot.labels" . | nindent 4 }}
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: {{ include "sre-copilot.fullname" . }}
+    name: {{ include "sre-bot.fullname" . }}
   minReplicas: {{ .Values.autoscaling.minReplicas }}
   maxReplicas: {{ .Values.autoscaling.maxReplicas }}
   metrics:
