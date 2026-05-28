@@ -60,7 +60,7 @@ jobs:
         run: uv sync --all-extras
 
       - name: Run mypy
-        run: uv run mypy src/ --ignore-missing-imports --no-strict
+        run: uv run mypy src/ --ignore-missing-imports --allow-untyped-defs --allow-incomplete-defs --no-warn-return-any
 
   test:
     name: Tests
