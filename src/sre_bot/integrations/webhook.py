@@ -1,5 +1,6 @@
 """Webhook receiver for Alertmanager alerts using FastAPI."""
 
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Any
@@ -50,7 +51,7 @@ class HealthResponse(BaseModel):
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):  # noqa: ARG001
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:  # noqa: ARG001
     """Lifespan context manager for startup/shutdown."""
     log = logger.bind(component="webhook_server")
     log.info("webhook server starting")
@@ -91,7 +92,7 @@ def _register_routes(app: FastAPI) -> None:
         )
 
     @app.get("/ready")
-    async def readiness_check() -> dict:
+    async def readiness_check() -> dict[str, str]:
         """Readiness check endpoint."""
         # Could add checks for dependencies (Prometheus, Loki, etc.)
         return {"status": "ready"}
@@ -290,8 +291,8 @@ def _register_routes(app: FastAPI) -> None:
 
 
 async def _process_alert(
-    alert: dict,
-    full_payload: dict,
+    alert: dict[str, Any],
+    full_payload: dict[str, Any],
     investigation_id: str,
 ) -> None:
     """
@@ -350,14 +351,14 @@ async def _process_alert(
 
         log.info(
             "investigation completed",
-            has_analysis=final_state.get("analysis") is not None,
-            errors=len(final_state.get("errors", [])),
+            has_analysis=final_state.analysis is not None,
+            errors=len(final_state.errors) if final_state.errors else 0,
         )
 
-        if final_state.get("errors"):
-            log.warning("investigation completed with errors", errors=final_state.get("errors", []))
+        if final_state.errors:
+            log.warning("investigation completed with errors", errors=final_state.errors)
 
-        if final_state.get("analysis") is None:
+        if final_state.analysis is None:
             log.warning("investigation completed without analysis")
 
     except Exception:
@@ -365,7 +366,7 @@ async def _process_alert(
 
 
 async def _process_custom_alert(
-    payload: dict,
+    payload: dict[str, Any],
     investigation_id: str,
 ) -> None:
     """
@@ -422,8 +423,8 @@ async def _process_custom_alert(
 
         log.info(
             "custom investigation completed",
-            has_analysis=final_state.get("analysis") is not None,
-            errors=len(final_state.get("errors", [])),
+            has_analysis=final_state.analysis is not None,
+            errors=len(final_state.errors) if final_state.errors else 0,
         )
 
     except Exception:

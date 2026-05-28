@@ -48,8 +48,10 @@ SRE bot is an autonomous agent that:
   - Tempo: distributed traces for failed requests
   - Kubernetes: pod status, events, logs, deployment info
   - GitHub: recent commits, deployments, PR context
+  - Alertmanager: correlated alerts for cascading failure detection
 - **Intelligent Analysis**: LLM-powered root cause synthesis with confidence scoring
-- **Slack Integration**: Real-time alerts, interactive commands, threaded responses
+- **Learning System**: Learns from validated solutions to improve future incident resolution
+- **Slack Integration**: Real-time alerts, interactive commands, threaded responses, feedback buttons
 - **Cloud Native**: Helm chart, HPA, health checks, structured logging
 
 ## Status
@@ -80,27 +82,23 @@ SRE bot expects these services to be available:
 ### Option 1: Helm (Recommended for Kubernetes)
 
 ```bash
-# Add the Helm repository (if published)
-helm repo add sre-bot https://mario-valente.github.io/sre-bot
+# Create namespace and secrets first
+kubectl create namespace sre-bot
 
-# Install with custom values
-helm install sre-bot sre-bot/sre-bot \
+kubectl create secret generic sre-bot-secrets \
   --namespace sre-bot \
-  --create-namespace \
-  -f values.yaml
-```
+  --from-literal=ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY \
+  --from-literal=SLACK_BOT_TOKEN=$SLACK_BOT_TOKEN \
+  --from-literal=SLACK_APP_TOKEN=$SLACK_APP_TOKEN \
+  --from-literal=SLACK_SIGNING_SECRET=$SLACK_SIGNING_SECRET
 
-Or install from source:
-
-```bash
+# Install from source
 helm install sre-bot ./k8s/charts/sre-bot \
   --namespace sre-bot \
-  --create-namespace \
-  --set config.llmProvider=openai \
-  --set secrets.openaiApiKey=$OPENAI_API_KEY \
-  --set secrets.slackBotToken=$SLACK_BOT_TOKEN \
-  --set secrets.slackAppToken=$SLACK_APP_TOKEN
+  -f my-values.yaml
 ```
+
+See [Helm Chart README](./k8s/charts/sre-bot/README.md) for detailed configuration options.
 
 ### Option 2: Docker
 
@@ -220,6 +218,16 @@ route:
 /sre-analyze payment-api production
 ```
 
+### Feedback System
+
+After each analysis, the bot displays feedback buttons:
+
+- **Correct** - Saves the solution to the learning database for future use
+- **Partially Correct** - Records feedback for improvement
+- **Incorrect** - Records that the analysis was wrong
+
+When you mark an analysis as "Correct", the bot learns from it and will suggest this solution for similar future incidents.
+
 ### Via REST API
 
 ```bash
@@ -241,6 +249,51 @@ curl -X POST http://localhost:8000/webhook/custom \
 | `/webhook/custom` | POST | Custom alert ingestion |
 | `/health` | GET | Health check |
 | `/ready` | GET | Readiness check |
+
+## Learning System
+
+SRE bot features a learning system that improves over time based on human feedback.
+
+### How It Works
+
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│   Alert     │────▶│  Analysis   │────▶│  Feedback   │────▶│  Learning   │
+│  Received   │     │  Generated  │     │  Received   │     │   Stored    │
+└─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘
+                                                                   │
+                    ┌──────────────────────────────────────────────┘
+                    │
+                    ▼
+              ┌─────────────┐     ┌─────────────┐
+              │   Similar   │────▶│  Enhanced   │
+              │   Alert     │     │  Analysis   │
+              └─────────────┘     └─────────────┘
+```
+
+1. **Alert Analysis**: Bot analyzes the incident using all available data sources
+2. **Human Feedback**: User validates the analysis via Slack buttons
+3. **Solution Stored**: If marked "Correct", the solution is saved to the database
+4. **Future Incidents**: When a similar alert occurs, the bot retrieves historical solutions
+5. **Enhanced Analysis**: LLM uses past solutions as context for better recommendations
+
+### Solution Matching
+
+Solutions are matched by priority:
+1. **Exact Match**: Same `alert_name` + `service_name` + `namespace`
+2. **Service Match**: Same `alert_name` + `service_name` (any namespace)
+3. **Service Patterns**: Same `service_name` (different alerts)
+4. **Generic Solutions**: Same `alert_name` (across services)
+
+### Database Schema
+
+The learning system uses SQLAlchemy with support for SQLite (dev) or PostgreSQL (production):
+
+| Table | Purpose |
+|-------|---------|
+| `incidents` | Stores all incident investigations |
+| `incident_feedback` | Human feedback on analyses |
+| `learned_solutions` | Validated solutions for reuse |
 
 ## Local Development Environment
 
@@ -322,12 +375,15 @@ sre-bot/
 
 ## Roadmap
 
+- [x] Learning system with feedback loop
+- [x] Correlated alerts detection
 - [ ] PagerDuty integration
 - [ ] Datadog support
 - [ ] Runbook automation
 - [ ] Multi-cluster support
 - [ ] Custom analysis plugins
 - [ ] Incident timeline visualization
+- [ ] Vector-based semantic search for solutions
 
 ## Contributing
 

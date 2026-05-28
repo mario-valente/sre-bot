@@ -88,10 +88,11 @@ async def fetch_metrics(state: AgentState) -> StateUpdate:
     query_errors = []
 
     for (name, _), result in zip(queries.items(), results, strict=False):
-        if isinstance(result, Exception):
+        if isinstance(result, BaseException):
             query_errors.append(f"{name}: {str(result)}")
             continue
 
+        # At this point, result is the expected type (not an exception)
         series_list = _parse_series(result)
 
         if name == "cpu":

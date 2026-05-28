@@ -1,11 +1,12 @@
 """Node for synthesizing analysis using LLM."""
 
 from datetime import datetime
+from typing import Any
 
 import structlog
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from sre_bot.agent.state import AgentState, IncidentAnalysis, StateUpdate
+from sre_bot.agent.state import AgentState, IncidentAnalysis
 from sre_bot.llm import get_llm
 
 logger = structlog.get_logger()
@@ -322,8 +323,8 @@ def _build_analysis_prompt(state: AgentState) -> str:
         # Pod logs
         if k8s.pod_logs:
             k8s_section += f"\n**Pod Logs Available: {len(k8s.pod_logs)} pod(s)**\n"
-            for pod_name, logs in list(k8s.pod_logs.items())[:2]:
-                log_lines = logs.split("\n")[:5]
+            for pod_name, pod_log_content in list(k8s.pod_logs.items())[:2]:
+                log_lines = pod_log_content.split("\n")[:5]
                 k8s_section += f"  **{pod_name}:**\n"
                 for line in log_lines:
                     if line.strip():
@@ -348,8 +349,8 @@ def _build_analysis_prompt(state: AgentState) -> str:
                 high_restarts = {k: v for k, v in ksm.container_restarts.items() if v > 3}
                 if high_restarts:
                     k8s_section += "\n**High Container Restarts:**\n"
-                    for pod, count in high_restarts.items():
-                        k8s_section += f"  - {pod}: {count} restarts\n"
+                    for pod_key, restart_count in high_restarts.items():
+                        k8s_section += f"  - {pod_key}: {restart_count} restarts\n"
 
         sections.append(k8s_section)
     else:
@@ -430,27 +431,29 @@ def _build_analysis_prompt(state: AgentState) -> str:
         if corr.potential_root_cause_alerts:
             corr_section += "### Potential Root Cause Alerts\n"
             corr_section += "These alerts may have CAUSED the current incident:\n"
-            for alert in corr.potential_root_cause_alerts:
-                time_diff = (state.alert.timestamp - alert.timestamp).total_seconds() / 60
-                corr_section += f"\n**{alert.alert_name}** ({alert.service_name})\n"
-                corr_section += f"  - Severity: {alert.severity}\n"
+            for corr_alert in corr.potential_root_cause_alerts:
+                time_diff = (state.alert.timestamp - corr_alert.timestamp).total_seconds() / 60
+                corr_section += f"\n**{corr_alert.alert_name}** ({corr_alert.service_name})\n"
+                corr_section += f"  - Severity: {corr_alert.severity}\n"
                 corr_section += f"  - Occurred: {time_diff:.0f} minutes BEFORE current alert\n"
-                if alert.probable_root_cause:
-                    corr_section += f"  - Root Cause Analysis: {alert.probable_root_cause[:150]}\n"
-                if alert.summary:
-                    corr_section += f"  - Summary: {alert.summary[:100]}\n"
+                if corr_alert.probable_root_cause:
+                    corr_section += (
+                        f"  - Root Cause Analysis: {corr_alert.probable_root_cause[:150]}\n"
+                    )
+                if corr_alert.summary:
+                    corr_section += f"  - Summary: {corr_alert.summary[:100]}\n"
 
         # Same service alerts (pattern detection)
         if corr.same_service_alerts:
             corr_section += f"\n### Same Service History ({len(corr.same_service_alerts)} alerts)\n"
             corr_section += "Recent alerts for the same service (may indicate recurring issue):\n"
-            for alert in corr.same_service_alerts[:3]:
-                time_diff = (state.alert.timestamp - alert.timestamp).total_seconds() / 60
+            for svc_alert in corr.same_service_alerts[:3]:
+                time_diff = (state.alert.timestamp - svc_alert.timestamp).total_seconds() / 60
                 corr_section += (
-                    f"  - {alert.alert_name} ({alert.severity}) - {time_diff:.0f}min ago"
+                    f"  - {svc_alert.alert_name} ({svc_alert.severity}) - {time_diff:.0f}min ago"
                 )
-                if alert.probable_root_cause:
-                    corr_section += f" - Cause: {alert.probable_root_cause[:80]}"
+                if svc_alert.probable_root_cause:
+                    corr_section += f" - Cause: {svc_alert.probable_root_cause[:80]}"
                 corr_section += "\n"
 
         # Same namespace alerts (dependency issues)
@@ -459,9 +462,9 @@ def _build_analysis_prompt(state: AgentState) -> str:
                 f"\n### Same Namespace Alerts ({len(corr.same_namespace_alerts)} alerts)\n"
             )
             corr_section += "Other services in the same namespace that may be related:\n"
-            for alert in corr.same_namespace_alerts[:5]:
-                time_diff = (state.alert.timestamp - alert.timestamp).total_seconds() / 60
-                corr_section += f"  - {alert.service_name}: {alert.alert_name} ({alert.severity}) - {time_diff:.0f}min ago\n"
+            for ns_alert in corr.same_namespace_alerts[:5]:
+                time_diff = (state.alert.timestamp - ns_alert.timestamp).total_seconds() / 60
+                corr_section += f"  - {ns_alert.service_name}: {ns_alert.alert_name} ({ns_alert.severity}) - {time_diff:.0f}min ago\n"
 
         # Dependency/infrastructure alerts
         if corr.dependency_alerts:
@@ -469,9 +472,9 @@ def _build_analysis_prompt(state: AgentState) -> str:
                 f"\n### Infrastructure/Dependency Alerts ({len(corr.dependency_alerts)} alerts)\n"
             )
             corr_section += "Database, cache, network, and other infrastructure alerts:\n"
-            for alert in corr.dependency_alerts[:5]:
-                time_diff = (state.alert.timestamp - alert.timestamp).total_seconds() / 60
-                corr_section += f"  - {alert.service_name}: {alert.alert_name} ({alert.severity}) - {time_diff:.0f}min ago\n"
+            for dep_alert in corr.dependency_alerts[:5]:
+                time_diff = (state.alert.timestamp - dep_alert.timestamp).total_seconds() / 60
+                corr_section += f"  - {dep_alert.service_name}: {dep_alert.alert_name} ({dep_alert.severity}) - {time_diff:.0f}min ago\n"
 
         if corr.query_errors:
             corr_section += "\n**Query Errors:**\n"
@@ -489,7 +492,7 @@ def _build_analysis_prompt(state: AgentState) -> str:
     return "\n".join(sections)
 
 
-async def synthesize(state: AgentState) -> StateUpdate:
+async def synthesize(state: AgentState) -> dict[str, Any]:
     """
     Synthesize all collected data into a root cause analysis using LLM.
 
@@ -546,7 +549,15 @@ Respond with a JSON object containing:
 
         # Invoke LLM
         response = await llm.ainvoke(messages)
-        response_text = response.content
+        response_content = response.content
+        # Handle different response content types
+        if isinstance(response_content, list):
+            response_text = " ".join(
+                str(item) if isinstance(item, str) else str(item.get("text", ""))
+                for item in response_content
+            )
+        else:
+            response_text = str(response_content)
 
         # Parse response
         analysis = _parse_llm_response(response_text, log)
@@ -588,7 +599,7 @@ Respond with a JSON object containing:
         }
 
 
-def _parse_llm_response(response_text: str, log) -> IncidentAnalysis:
+def _parse_llm_response(response_text: str, log: Any) -> IncidentAnalysis:
     """Parse LLM response into IncidentAnalysis object."""
     import json
     import re

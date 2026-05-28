@@ -1,12 +1,12 @@
 """LangGraph state definitions for the SRE Copilot agent."""
 
 from datetime import datetime
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field
 
 
-def merge_lists(left: list, right: list) -> list:
+def merge_lists(left: list[str], right: list[str]) -> list[str]:
     """Reducer that merges two lists (used for LangGraph state updates)."""
     return left + right
 
@@ -29,7 +29,7 @@ class AlertContext(BaseModel):
     pod: str | None = Field(default=None, description="Specific pod name if available")
     status_code: int | None = Field(default=None, description="HTTP status code if relevant")
     timestamp: datetime = Field(description="When the alert fired")
-    raw_payload: dict = Field(
+    raw_payload: dict[str, Any] = Field(
         default_factory=dict, description="Original alert payload for debugging"
     )
     description: str = Field(default="", description="Alert description/summary")
@@ -206,19 +206,25 @@ class ContainerInfo(BaseModel):
     name: str = Field(description="Container name")
     image: str = Field(description="Container image")
     state: str = Field(description="Container state (running, waiting, terminated)")
-    state_detail: dict = Field(default_factory=dict, description="State details")
+    state_detail: dict[str, Any] = Field(default_factory=dict, description="State details")
     ready: bool = Field(default=False, description="Whether container is ready")
     restart_count: int = Field(default=0, description="Number of restarts")
-    resources: dict = Field(default_factory=dict, description="Resource limits/requests")
+    resources: dict[str, Any] = Field(default_factory=dict, description="Resource limits/requests")
     command: list[str] = Field(default_factory=list, description="Container entrypoint command")
     args: list[str] = Field(default_factory=list, description="Container arguments")
     env_vars: dict[str, str] = Field(default_factory=dict, description="Environment variables")
     image_pull_policy: str = Field(default="", description="Image pull policy")
-    liveness_probe: dict = Field(default_factory=dict, description="Liveness probe configuration")
-    readiness_probe: dict = Field(default_factory=dict, description="Readiness probe configuration")
-    startup_probe: dict = Field(default_factory=dict, description="Startup probe configuration")
-    security_context: dict = Field(default_factory=dict, description="Security context")
-    volume_mounts: list[dict] = Field(default_factory=list, description="Volume mounts")
+    liveness_probe: dict[str, Any] = Field(
+        default_factory=dict, description="Liveness probe configuration"
+    )
+    readiness_probe: dict[str, Any] = Field(
+        default_factory=dict, description="Readiness probe configuration"
+    )
+    startup_probe: dict[str, Any] = Field(
+        default_factory=dict, description="Startup probe configuration"
+    )
+    security_context: dict[str, Any] = Field(default_factory=dict, description="Security context")
+    volume_mounts: list[dict[str, Any]] = Field(default_factory=list, description="Volume mounts")
 
 
 class PodCondition(BaseModel):
@@ -257,7 +263,7 @@ class KubernetesEvent(BaseModel):
     count: int = Field(default=1, description="Number of times event occurred")
     first_timestamp: str | None = Field(default=None, description="First occurrence")
     last_timestamp: str | None = Field(default=None, description="Last occurrence")
-    involved_object: dict = Field(default_factory=dict, description="Object involved")
+    involved_object: dict[str, Any] = Field(default_factory=dict, description="Object involved")
     source: str | None = Field(default=None, description="Event source component")
 
 
@@ -266,12 +272,14 @@ class DeploymentInfo(BaseModel):
 
     name: str = Field(description="Deployment name")
     namespace: str = Field(description="Deployment namespace")
-    replicas: dict = Field(
+    replicas: dict[str, int] = Field(
         default_factory=dict,
         description="Replica counts (desired, ready, available, unavailable)",
     )
     strategy: str | None = Field(default=None, description="Deployment strategy")
-    conditions: list[dict] = Field(default_factory=list, description="Deployment conditions")
+    conditions: list[dict[str, Any]] = Field(
+        default_factory=list, description="Deployment conditions"
+    )
     created_at: str | None = Field(default=None, description="Creation timestamp")
     labels: dict[str, str] = Field(default_factory=dict, description="Labels")
     annotations: dict[str, str] = Field(default_factory=dict, description="Deployment annotations")
@@ -284,7 +292,7 @@ class DeploymentInfo(BaseModel):
     selector: dict[str, str] = Field(default_factory=dict, description="Label selector")
     min_ready_seconds: int = Field(default=0, description="Min ready seconds")
     revision_history_limit: int | None = Field(default=None, description="Revision history limit")
-    volumes: list[dict] = Field(default_factory=list, description="Pod template volumes")
+    volumes: list[dict[str, Any]] = Field(default_factory=list, description="Pod template volumes")
 
 
 class KubeStateMetricsData(BaseModel):
@@ -294,11 +302,11 @@ class KubeStateMetricsData(BaseModel):
         default_factory=dict,
         description="Pod name to phase mapping",
     )
-    container_waiting_reasons: list[dict] = Field(
+    container_waiting_reasons: list[dict[str, Any]] = Field(
         default_factory=list,
         description="Containers in waiting state with reasons",
     )
-    container_terminated_reasons: list[dict] = Field(
+    container_terminated_reasons: list[dict[str, Any]] = Field(
         default_factory=list,
         description="Containers in terminated state with reasons",
     )
@@ -306,15 +314,15 @@ class KubeStateMetricsData(BaseModel):
         default_factory=dict,
         description="Container restart counts",
     )
-    deployment_replicas: dict = Field(
+    deployment_replicas: dict[str, Any] = Field(
         default_factory=dict,
         description="Deployment replica status",
     )
-    resource_limits: list[dict] = Field(
+    resource_limits: list[dict[str, Any]] = Field(
         default_factory=list,
         description="Container resource limits",
     )
-    resource_requests: list[dict] = Field(
+    resource_requests: list[dict[str, Any]] = Field(
         default_factory=list,
         description="Container resource requests",
     )
@@ -545,4 +553,4 @@ class AgentState(BaseModel):
 
 
 # Type alias for node return values (partial state updates)
-StateUpdate = dict
+StateUpdate = dict[str, Any]

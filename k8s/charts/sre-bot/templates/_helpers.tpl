@@ -1,7 +1,7 @@
 {{/*
 Expand the name of the chart.
 */}}
-{{- define "sre-copilot.name" -}}
+{{- define "sre-bot.name" -}}
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
@@ -10,7 +10,7 @@ Create a default fully qualified app name.
 We truncate at 63 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).
 If release name contains chart name it will be used as a full name.
 */}}
-{{- define "sre-copilot.fullname" -}}
+{{- define "sre-bot.fullname" -}}
 {{- if .Values.fullnameOverride }}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
 {{- else }}
@@ -26,16 +26,16 @@ If release name contains chart name it will be used as a full name.
 {{/*
 Create chart name and version as used by the chart label.
 */}}
-{{- define "sre-copilot.chart" -}}
+{{- define "sre-bot.chart" -}}
 {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*
 Common labels
 */}}
-{{- define "sre-copilot.labels" -}}
-helm.sh/chart: {{ include "sre-copilot.chart" . }}
-{{ include "sre-copilot.selectorLabels" . }}
+{{- define "sre-bot.labels" -}}
+helm.sh/chart: {{ include "sre-bot.chart" . }}
+{{ include "sre-bot.selectorLabels" . }}
 {{- if .Chart.AppVersion }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
@@ -45,17 +45,17 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{/*
 Selector labels
 */}}
-{{- define "sre-copilot.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "sre-copilot.name" . }}
+{{- define "sre-bot.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "sre-bot.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
 Create the name of the service account to use
 */}}
-{{- define "sre-copilot.serviceAccountName" -}}
+{{- define "sre-bot.serviceAccountName" -}}
 {{- if .Values.serviceAccount.create }}
-{{- default (include "sre-copilot.fullname" .) .Values.serviceAccount.name }}
+{{- default (include "sre-bot.fullname" .) .Values.serviceAccount.name }}
 {{- else }}
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
@@ -64,9 +64,9 @@ Create the name of the service account to use
 {{/*
 Create the name of the secret to use
 */}}
-{{- define "sre-copilot.secretName" -}}
+{{- define "sre-bot.secretName" -}}
 {{- if .Values.secrets.create }}
-{{- include "sre-copilot.fullname" . }}-secrets
+{{- include "sre-bot.fullname" . }}-secrets
 {{- else }}
 {{- .Values.secrets.existingSecret }}
 {{- end }}

@@ -76,7 +76,7 @@ class AlertmanagerClient:
         """
         self._log.debug("fetching alerts", active=active, silenced=silenced)
 
-        params = {
+        params: dict[str, str | list[str]] = {
             "active": str(active).lower(),
             "silenced": str(silenced).lower(),
             "inhibited": str(inhibited).lower(),

@@ -1,14 +1,16 @@
 """Node for posting analysis results to Slack."""
 
+from typing import Any
+
 import structlog
 
-from sre_bot.agent.state import AgentState, IncidentAnalysis, StateUpdate
+from sre_bot.agent.state import AgentState, IncidentAnalysis
 from sre_bot.db.repository import IncidentRepository, LearnedSolutionRepository, get_session
 
 logger = structlog.get_logger()
 
 
-async def post_to_slack(state: AgentState) -> StateUpdate:
+async def post_to_slack(state: AgentState) -> dict[str, Any]:
     """
     Post the incident analysis to Slack.
 
@@ -118,7 +120,7 @@ async def post_to_slack(state: AgentState) -> StateUpdate:
         return {"errors": [f"Slack post failed: {str(e)}"]}
 
 
-def _format_analysis_blocks(alert, analysis: IncidentAnalysis) -> list[dict]:
+def _format_analysis_blocks(alert: Any, analysis: IncidentAnalysis) -> list[dict[str, Any]]:
     """
     Format analysis as Slack blocks.
 
@@ -134,7 +136,7 @@ def _format_analysis_blocks(alert, analysis: IncidentAnalysis) -> list[dict]:
     else:
         emoji = ":question:"
 
-    blocks = [
+    blocks: list[dict[str, Any]] = [
         # Header
         {
             "type": "header",
@@ -245,7 +247,7 @@ def _format_analysis_blocks(alert, analysis: IncidentAnalysis) -> list[dict]:
     return blocks
 
 
-def _format_analysis_text(alert, analysis: IncidentAnalysis) -> str:
+def _format_analysis_text(alert: Any, analysis: IncidentAnalysis) -> str:
     """
     Format analysis as plain text (fallback).
 
@@ -281,7 +283,7 @@ def _format_analysis_text(alert, analysis: IncidentAnalysis) -> str:
     return "\n".join(lines)
 
 
-def _build_feedback_blocks(incident_id: int) -> list[dict]:
+def _build_feedback_blocks(incident_id: int) -> list[dict[str, Any]]:
     """
     Build Slack blocks for feedback buttons.
 

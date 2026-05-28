@@ -80,10 +80,11 @@ async def fetch_traces(state: AgentState) -> StateUpdate:
     query_errors = []
 
     for (name, _), result in zip(queries.items(), results, strict=False):
-        if isinstance(result, Exception):
+        if isinstance(result, BaseException):
             query_errors.append(f"{name}: {str(result)}")
             continue
 
+        # At this point, result is the expected type (not an exception)
         spans = _parse_trace_results(result)
 
         if name == "errors" or name == "failed_http":
