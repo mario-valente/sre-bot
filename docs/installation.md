@@ -201,5 +201,5 @@ curl -X POST http://localhost:8000/webhook/custom \
 ## Next Steps
 
 - [Configuration](configuration.md) - Configure environment variables
-- [Slack Setup](slack-setup.md) - Set up Slack integration
-- [Alertmanager Setup](alertmanager-setup.md) - Configure Alertmanager webhook
+- [Architecture](architecture.md) - Understand how the agent works
+- [API Reference](api-reference.md) - REST API documentation
